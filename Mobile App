@@ -1,0 +1,139 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:tflite/tflite.dart';
+
+void main() {
+  runApp(
+    MaterialApp(home: MyApp())
+  );
+}
+
+class  MyApp extends StatefulWidget {
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _loading; // the _loading will be used to show CircularProgressIndicator if _loading is true
+   var _outputs;
+
+  void initState() {
+    super.initState();
+    _loading = true;
+    loadModel().then((value) {
+      setState(() {
+        _loading = false;
+      });
+    });
+  }
+
+//Load the Tflite model
+  loadModel() async {
+    await Tflite.loadModel(
+      model: "assets/model_unquant.tflite",
+      labels: "assets/labels.txt",
+    );
+  }
+
+  File Imagefile;
+  openimage(ImageSource source) async {
+    List<ImageCompressFormat> values=[ImageCompressFormat.jpg,ImageCompressFormat.png];
+ var picture= await ImagePicker.pickImage(source:source,maxHeight: 300,maxWidth: 300);
+ if(picture!=null){
+   var croppedimage=await ImageCropper.cropImage(
+     sourcePath: picture.path,
+     maxWidth: 300,
+     maxHeight: 300,
+     aspectRatio: CropAspectRatio(ratioX: 2.27,ratioY: 1),
+       compressFormat:ImageCompressFormat.jpg,
+     androidUiSettings: AndroidUiSettings(
+         toolbarColor: Colors.green,
+         statusBarColor: Colors.green
+     )
+ );
+ setState(() {
+   Imagefile= croppedimage;
+ });
+
+ }
+
+
+ classifyImage(Imagefile);
+    Navigator.of(context).pop();
+  }
+//  opencamera(context) async{
+//    var picture= await ImagePicker.pickImage(source: ImageSource.camera,maxHeight: 300,maxWidth: 300);
+//    setState(() {
+//      Imagefile= picture;
+//    });
+//    classifyImage(Imagefile);
+//    Navigator.of(context).pop();
+//  }
+  classifyImage(File Imagefile) async {
+    var output = await Tflite.runModelOnImage(
+      path: Imagefile.path,
+      numResults: 2,
+      threshold: 0.75,
+      imageMean: 127.5,
+      imageStd: 127.5,
+    );
+    setState(() {
+      _loading = false;
+      //Declare List _outputs in the class which will be used to show the classified classs name and confidence
+     _outputs = output;
+    });
+  }
+  Future<void> _showdialogoptions (BuildContext context)
+  {
+   return showDialog(context:context,builder:(BuildContext context){
+     return AlertDialog(
+       title:Text('Make a choice'),
+       content: SingleChildScrollView(
+       child: ListBody(children: <Widget>[
+         Padding(padding: EdgeInsets.all(10.0)),
+         GestureDetector(child:Text('Choose from Gallery'),onTap:(){openimage(ImageSource.gallery);}),
+         Padding(padding: EdgeInsets.all(10.0)),
+       GestureDetector(child: Text('Camera'),onTap:(){openimage(ImageSource.camera);})
+       ]
+       ),
+     ),
+     );
+   }
+   );
+  }
+  Widget _imagedisplay(){
+    if (Imagefile==null)return Text('Click Image');
+    else
+      return Image.file(Imagefile,height: 300,width: 300,);
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(appBar: AppBar(title: Text('Mr FakeorNot'),),
+      body:Container(child:Center(child:Column(mainAxisAlignment: MainAxisAlignment.spaceEvenly,children: <Widget>[
+        _imagedisplay(),
+        SizedBox(
+          height: 20,
+        ),
+        _outputs != null
+            ? Text(
+          "${_outputs[0]["label"]}",
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 20.0,
+            background: Paint()..color = Colors.white,
+          ),
+        )
+            : Text("Classification pending"),
+        SizedBox(height: 10),
+        RaisedButton(onPressed:(){ _showdialogoptions(context);
+      },child: Text('Choose an Image'),
+        )
+      ],
+      ),
+      ),
+      ),
+    );
+  }
+}
